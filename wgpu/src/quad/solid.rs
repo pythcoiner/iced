@@ -108,14 +108,18 @@ impl Pipeline {
                             4 => Float32x4,
                             // Border width
                             5 => Float32,
-                            // Shadow color
-                            6 => Float32x4,
-                            // Shadow offset
+                            // Border style
+                            6 => Uint32,
+                            // Dash
                             7 => Float32x2,
+                            // Shadow color
+                            8 => Float32x4,
+                            // Shadow offset
+                            9 => Float32x2,
                             // Shadow blur radius
-                            8 => Float32,
+                            10 => Float32,
                             // Snap
-                            9 => Uint32,
+                            11 => Uint32,
                         ),
                     }],
                     compilation_options:

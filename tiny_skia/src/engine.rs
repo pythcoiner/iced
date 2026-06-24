@@ -2,6 +2,7 @@ use crate::Primitive;
 use crate::core::renderer::Quad;
 use crate::core::{
     Background, Color, Gradient, Rectangle, Size, Transformation, Vector,
+    border,
 };
 use crate::graphics::{Image, Text};
 use crate::text;
@@ -232,23 +233,42 @@ impl Engine {
             if is_simple_border {
                 let border_path =
                     rounded_rectangle(border_bounds, border_radius);
+                let border_paint = tiny_skia::Paint {
+                    shader: tiny_skia::Shader::SolidColor(into_color(
+                        quad.border.color,
+                    )),
+                    anti_alias: true,
+                    ..tiny_skia::Paint::default()
+                };
 
-                pixels.stroke_path(
-                    &border_path,
-                    &tiny_skia::Paint {
-                        shader: tiny_skia::Shader::SolidColor(into_color(
-                            quad.border.color,
-                        )),
-                        anti_alias: true,
-                        ..tiny_skia::Paint::default()
-                    },
-                    &tiny_skia::Stroke {
-                        width: border_width,
-                        ..tiny_skia::Stroke::default()
-                    },
-                    transform,
-                    clip_mask,
-                );
+                if quad.border.style.segments(border_width).is_some() {
+                    draw_segmented_border(
+                        pixels,
+                        border_bounds,
+                        border_radius,
+                        quad.border.style,
+                        border_width,
+                        &border_paint,
+                        transform,
+                        clip_mask,
+                    );
+                } else {
+                    pixels.stroke_path(
+                        &border_path,
+                        &border_paint,
+                        &border_stroke(
+                            quad.border.style,
+                            border_width,
+                            border::perimeter(
+                                border_bounds.size(),
+                                quad.border.radius,
+                            ),
+                            false,
+                        ),
+                        transform,
+                        clip_mask,
+                    );
+                }
             } else {
                 // Draw corners that have too small border radii as having no border radius,
                 // but mask them with the rounded rectangle with the correct border radius.
@@ -287,23 +307,42 @@ impl Engine {
 
                 let border_radius_path =
                     rounded_rectangle(path_bounds, border_radius);
+                let border_paint = tiny_skia::Paint {
+                    shader: tiny_skia::Shader::SolidColor(into_color(
+                        quad.border.color,
+                    )),
+                    anti_alias: true,
+                    ..tiny_skia::Paint::default()
+                };
 
-                temp_pixmap.stroke_path(
-                    &border_radius_path,
-                    &tiny_skia::Paint {
-                        shader: tiny_skia::Shader::SolidColor(into_color(
-                            quad.border.color,
-                        )),
-                        anti_alias: true,
-                        ..tiny_skia::Paint::default()
-                    },
-                    &tiny_skia::Stroke {
-                        width: border_width,
-                        ..tiny_skia::Stroke::default()
-                    },
-                    transform,
-                    Some(&quad_mask),
-                );
+                if quad.border.style.segments(border_width).is_some() {
+                    draw_segmented_border(
+                        &mut temp_pixmap.as_mut(),
+                        path_bounds,
+                        border_radius,
+                        quad.border.style,
+                        border_width,
+                        &border_paint,
+                        transform,
+                        Some(&quad_mask),
+                    );
+                } else {
+                    temp_pixmap.stroke_path(
+                        &border_radius_path,
+                        &border_paint,
+                        &border_stroke(
+                            quad.border.style,
+                            border_width,
+                            border::perimeter(
+                                path_bounds.size(),
+                                quad.border.radius,
+                            ),
+                            false,
+                        ),
+                        transform,
+                        Some(&quad_mask),
+                    );
+                }
 
                 pixels.draw_pixmap(
                     quad.bounds.x as i32,
@@ -663,6 +702,322 @@ fn into_transform(transformation: Transformation) -> tiny_skia::Transform {
         tx: translation.x,
         ty: translation.y,
     }
+}
+
+fn draw_segmented_border(
+    pixels: &mut tiny_skia::PixmapMut<'_>,
+    bounds: Rectangle,
+    border_radius: [f32; 4],
+    style: border::Style,
+    width: f32,
+    paint: &tiny_skia::Paint<'_>,
+    transform: tiny_skia::Transform,
+    clip_mask: Option<&tiny_skia::Mask>,
+) {
+    let [top_left, top_right, bottom_right, bottom_left] = border_radius;
+    let x = bounds.x;
+    let y = bounds.y;
+    let right = bounds.x + bounds.width;
+    let bottom = bounds.y + bounds.height;
+
+    if top_left > 0.0
+        && top_right > 0.0
+        && bottom_right > 0.0
+        && bottom_left > 0.0
+    {
+        let path = rounded_rectangle(bounds, border_radius);
+
+        pixels.stroke_path(
+            &path,
+            paint,
+            &border_stroke(
+                style,
+                width,
+                border::perimeter(
+                    bounds.size(),
+                    border::Radius {
+                        top_left,
+                        top_right,
+                        bottom_right,
+                        bottom_left,
+                    },
+                ),
+                false,
+            ),
+            transform,
+            clip_mask,
+        );
+    } else {
+        if top_left == 0.0 {
+            draw_border_run(
+                pixels,
+                bounds,
+                border_radius,
+                0,
+                style,
+                width,
+                paint,
+                transform,
+                clip_mask,
+            );
+        }
+        if top_right == 0.0 {
+            draw_border_run(
+                pixels,
+                bounds,
+                border_radius,
+                1,
+                style,
+                width,
+                paint,
+                transform,
+                clip_mask,
+            );
+        }
+        if bottom_right == 0.0 {
+            draw_border_run(
+                pixels,
+                bounds,
+                border_radius,
+                2,
+                style,
+                width,
+                paint,
+                transform,
+                clip_mask,
+            );
+        }
+        if bottom_left == 0.0 {
+            draw_border_run(
+                pixels,
+                bounds,
+                border_radius,
+                3,
+                style,
+                width,
+                paint,
+                transform,
+                clip_mask,
+            );
+        }
+    }
+
+    if matches!(style.segments(width), Some(segments) if segments.rounded) {
+        draw_corner_dot(
+            pixels, x, y, top_left, width, paint, transform, clip_mask,
+        );
+        draw_corner_dot(
+            pixels, right, y, top_right, width, paint, transform, clip_mask,
+        );
+        draw_corner_dot(
+            pixels,
+            right,
+            bottom,
+            bottom_right,
+            width,
+            paint,
+            transform,
+            clip_mask,
+        );
+        draw_corner_dot(
+            pixels,
+            x,
+            bottom,
+            bottom_left,
+            width,
+            paint,
+            transform,
+            clip_mask,
+        );
+    }
+}
+
+fn draw_border_run(
+    pixels: &mut tiny_skia::PixmapMut<'_>,
+    bounds: Rectangle,
+    border_radius: [f32; 4],
+    start: usize,
+    style: border::Style,
+    width: f32,
+    paint: &tiny_skia::Paint<'_>,
+    transform: tiny_skia::Transform,
+    clip_mask: Option<&tiny_skia::Mask>,
+) {
+    let mut path = tiny_skia::PathBuilder::new();
+    let [top_left, top_right, bottom_right, bottom_left] = border_radius;
+    let x = bounds.x;
+    let y = bounds.y;
+    let right = bounds.x + bounds.width;
+    let bottom = bounds.y + bounds.height;
+
+    match start {
+        0 => path.move_to(x, y),
+        1 => path.move_to(right, y),
+        2 => path.move_to(right, bottom),
+        _ => path.move_to(x, bottom),
+    }
+
+    let mut length = 0.0;
+    let mut side = start;
+
+    loop {
+        length += append_border_side(&mut path, bounds, border_radius, side);
+
+        side = (side + 1) % 4;
+
+        let next_radius = match side {
+            0 => top_left,
+            1 => top_right,
+            2 => bottom_right,
+            _ => bottom_left,
+        };
+
+        if next_radius == 0.0 {
+            break;
+        }
+    }
+
+    pixels.stroke_path(
+        &path.finish().expect("Build border segment path"),
+        paint,
+        &border_stroke(style, width, length, true),
+        transform,
+        clip_mask,
+    );
+}
+
+fn append_border_side(
+    path: &mut tiny_skia::PathBuilder,
+    bounds: Rectangle,
+    border_radius: [f32; 4],
+    side: usize,
+) -> f32 {
+    let [top_left, top_right, bottom_right, bottom_left] = border_radius;
+    let x = bounds.x;
+    let y = bounds.y;
+    let right = bounds.x + bounds.width;
+    let bottom = bounds.y + bounds.height;
+
+    match side {
+        0 => {
+            path.line_to(right - top_right, y);
+
+            if top_right > 0.0 {
+                arc_to(
+                    path,
+                    right - top_right,
+                    y,
+                    right,
+                    y + top_right,
+                    top_right,
+                );
+            }
+
+            bounds.width - top_left - top_right
+                + std::f32::consts::FRAC_PI_2 * top_right
+        }
+        1 => {
+            path.line_to(right, bottom - bottom_right);
+
+            if bottom_right > 0.0 {
+                arc_to(
+                    path,
+                    right,
+                    bottom - bottom_right,
+                    right - bottom_right,
+                    bottom,
+                    bottom_right,
+                );
+            }
+
+            bounds.height - top_right - bottom_right
+                + std::f32::consts::FRAC_PI_2 * bottom_right
+        }
+        2 => {
+            path.line_to(x + bottom_left, bottom);
+
+            if bottom_left > 0.0 {
+                arc_to(
+                    path,
+                    x + bottom_left,
+                    bottom,
+                    x,
+                    bottom - bottom_left,
+                    bottom_left,
+                );
+            }
+
+            bounds.width - bottom_right - bottom_left
+                + std::f32::consts::FRAC_PI_2 * bottom_left
+        }
+        _ => {
+            path.line_to(x, y + top_left);
+
+            if top_left > 0.0 {
+                arc_to(path, x, y + top_left, x + top_left, y, top_left);
+            }
+
+            bounds.height - bottom_left - top_left
+                + std::f32::consts::FRAC_PI_2 * top_left
+        }
+    }
+}
+
+fn draw_corner_dot(
+    pixels: &mut tiny_skia::PixmapMut<'_>,
+    x: f32,
+    y: f32,
+    radius: f32,
+    width: f32,
+    paint: &tiny_skia::Paint<'_>,
+    transform: tiny_skia::Transform,
+    clip_mask: Option<&tiny_skia::Mask>,
+) {
+    if radius != 0.0 {
+        return;
+    }
+
+    let dot_radius = width / 2.0;
+
+    let Some(path) = tiny_skia::PathBuilder::from_circle(x, y, dot_radius)
+    else {
+        return;
+    };
+
+    pixels.fill_path(
+        &path,
+        paint,
+        tiny_skia::FillRule::Winding,
+        transform,
+        clip_mask,
+    );
+}
+
+fn border_stroke(
+    style: border::Style,
+    width: f32,
+    perimeter: f32,
+    centered: bool,
+) -> tiny_skia::Stroke {
+    let mut stroke = tiny_skia::Stroke {
+        width,
+        ..tiny_skia::Stroke::default()
+    };
+
+    if let Some(segments) = style.segments(width) {
+        let segments = segments.fit_to_length(perimeter);
+
+        stroke.dash = tiny_skia::StrokeDash::new(
+            vec![segments.on, segments.off],
+            if centered { segments.on / 2.0 } else { 0.0 },
+        );
+
+        if segments.rounded {
+            stroke.line_cap = tiny_skia::LineCap::Round;
+        }
+    }
+
+    stroke
 }
 
 fn rounded_rectangle(

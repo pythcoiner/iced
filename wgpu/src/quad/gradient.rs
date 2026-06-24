@@ -130,8 +130,12 @@ impl Pipeline {
                                 8 => Float32x4,
                                 // Border width
                                 9 => Float32,
-                                // Snap
+                                // Border style
                                 10 => Uint32,
+                                // Dash
+                                11 => Float32x2,
+                                // Snap
+                                12 => Uint32,
                             ),
                         }],
                         compilation_options:

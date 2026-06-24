@@ -515,6 +515,7 @@ where
                     radius: handle_border_radius,
                     width: style.handle.border_width,
                     color: style.handle.border_color,
+                    ..Border::default()
                 },
                 ..renderer::Quad::default()
             },
@@ -690,6 +691,7 @@ pub fn default(theme: &Theme, status: Status) -> Style {
                 radius: 2.0.into(),
                 width: 0.0,
                 color: Color::TRANSPARENT,
+                ..Border::default()
             },
         },
         handle: Handle {

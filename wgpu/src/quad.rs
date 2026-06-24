@@ -33,6 +33,12 @@ pub struct Quad {
     /// The border width of the [`Quad`].
     pub border_width: f32,
 
+    /// The border line style of the [`Quad`]: 0 solid, 1 dashed, 2 dotted.
+    pub border_style: u32,
+
+    /// The dash segment and gap lengths of the [`Quad`] border.
+    pub dash: [f32; 2],
+
     /// The shadow color of the [`Quad`].
     pub shadow_color: color::Packed,
 

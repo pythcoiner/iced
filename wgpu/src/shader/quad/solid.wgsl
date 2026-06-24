@@ -6,10 +6,12 @@ struct SolidVertexInput {
     @location(3) border_color: vec4<f32>,
     @location(4) border_radius: vec4<f32>,
     @location(5) border_width: f32,
-    @location(6) shadow_color: vec4<f32>,
-    @location(7) shadow_offset: vec2<f32>,
-    @location(8) shadow_blur_radius: f32,
-    @location(9) snap: u32,
+    @location(6) border_style: u32,
+    @location(7) dash: vec2<f32>,
+    @location(8) shadow_color: vec4<f32>,
+    @location(9) shadow_offset: vec2<f32>,
+    @location(10) shadow_blur_radius: f32,
+    @location(11) snap: u32,
 }
 
 struct SolidVertexOutput {
@@ -23,6 +25,8 @@ struct SolidVertexOutput {
     @location(6) shadow_color: vec4<f32>,
     @location(7) shadow_offset: vec2<f32>,
     @location(8) shadow_blur_radius: f32,
+    @location(9) @interpolate(flat) border_style: u32,
+    @location(10) @interpolate(flat) dash: vec2<f32>,
 }
 
 @vertex
@@ -59,6 +63,8 @@ fn solid_vs_main(input: SolidVertexInput) -> SolidVertexOutput {
     out.shadow_color = premultiply(input.shadow_color);
     out.shadow_offset = input.shadow_offset * globals.scale;
     out.shadow_blur_radius = input.shadow_blur_radius * globals.scale;
+    out.border_style = input.border_style;
+    out.dash = input.dash * globals.scale;
 
     return out;
 }
@@ -76,10 +82,20 @@ fn solid_fs_main(
     ) / 2.0;
 
     if (input.border_width > 0.0) {
+        let dash_alpha = border_dash_alpha(
+            input.position.xy - input.pos - input.scale * 0.5,
+            input.scale * 0.5,
+            input.border_radius,
+            input.border_style,
+            input.dash,
+            dist,
+            input.border_width
+        );
+
         mixed_color = mix(
             input.color,
             input.border_color,
-            clamp(0.5 + dist + input.border_width, 0.0, 1.0)
+            clamp(0.5 + dist + input.border_width, 0.0, 1.0) * dash_alpha
         );
     }
 

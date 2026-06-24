@@ -10,7 +10,9 @@ struct GradientVertexInput {
     @location(7) border_color: vec4<f32>,
     @location(8) border_radius: vec4<f32>,
     @location(9) border_width: f32,
-    @location(10) snap: u32,
+    @location(10) border_style: u32,
+    @location(11) dash: vec2<f32>,
+    @location(12) snap: u32,
 }
 
 struct GradientVertexOutput {
@@ -25,6 +27,8 @@ struct GradientVertexOutput {
     @location(8) border_color: vec4<f32>,
     @location(9) border_radius: vec4<f32>,
     @location(10) border_width: f32,
+    @location(11) @interpolate(flat) border_style: u32,
+    @location(12) @interpolate(flat) dash: vec2<f32>,
 }
 
 @vertex
@@ -68,6 +72,8 @@ fn gradient_vs_main(input: GradientVertexInput) -> GradientVertexOutput {
     out.border_color = premultiply(input.border_color);
     out.border_radius = border_radius * globals.scale;
     out.border_width = input.border_width * globals.scale;
+    out.border_style = input.border_style;
+    out.dash = input.dash * globals.scale;
 
     return out;
 }
@@ -173,10 +179,20 @@ fn gradient_fs_main(input: GradientVertexOutput) -> @location(0) vec4<f32> {
     ) / 2.0;
 
     if (input.border_width > 0.0) {
+        let dash_alpha = border_dash_alpha(
+            input.position.xy - pos - scale * 0.5,
+            scale * 0.5,
+            input.border_radius,
+            input.border_style,
+            input.dash,
+            dist,
+            input.border_width
+        );
+
         mixed_color = mix(
             mixed_color,
             input.border_color,
-            clamp(0.5 + dist + input.border_width, 0.0, 1.0)
+            clamp(0.5 + dist + input.border_width, 0.0, 1.0) * dash_alpha
         );
     }
 

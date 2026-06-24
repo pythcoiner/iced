@@ -46,6 +46,15 @@ impl Layer {
     ) {
         let bounds = quad.bounds * transformation;
 
+        let (border_style, dash) =
+            match quad.border.style.segments(quad.border.width) {
+                None => (0, [0.0, 0.0]),
+                Some(segments) => (
+                    if segments.rounded { 2 } else { 1 },
+                    [segments.on, segments.off],
+                ),
+            };
+
         let quad = Quad {
             position: [bounds.x, bounds.y],
             size: [bounds.width, bounds.height],
@@ -53,6 +62,8 @@ impl Layer {
             border_radius: (quad.border.radius * transformation.scale_factor())
                 .into(),
             border_width: quad.border.width * transformation.scale_factor(),
+            border_style,
+            dash,
             shadow_color: color::pack(quad.shadow.color),
             shadow_offset: (quad.shadow.offset * transformation.scale_factor())
                 .into(),
